@@ -7,7 +7,8 @@ import { useState, useRef } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { 
   FileAudio, Upload, Loader2, FileText, Play, Pause, Trash2, 
-  Sparkles, Copy, Check, Edit3, Save, RefreshCw, Layers, Image as ImageIcon, X
+  Sparkles, Copy, Check, Edit3, Save, RefreshCw, Layers, Image as ImageIcon, X,
+  Bookmark, History, Trash
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -19,11 +20,24 @@ interface ScriptVariation {
   style: ScriptStyle;
 }
 
+interface SavedScript {
+  id: string;
+  content: string;
+  style: ScriptStyle;
+  timestamp: number;
+  mode: 'audio' | 'image';
+}
+
 export default function App() {
   const [activeMode, setActiveMode] = useState<'audio' | 'image'>('audio');
   const [file, setFile] = useState<File | null>(null);
   const [images, setImages] = useState<File[]>([]);
   const [variations, setVariations] = useState<ScriptVariation[]>([]);
+  const [savedScripts, setSavedScripts] = useState<SavedScript[]>(() => {
+    const saved = localStorage.getItem('script_studio_saved');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showLibrary, setShowLibrary] = useState(false);
   const [activeVariationIndex, setActiveVariationIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +45,7 @@ export default function App() {
   const [selectedStyle, setSelectedStyle] = useState<ScriptStyle>('transcription');
   const [variationCount, setVariationCount] = useState(1);
   const [scriptDuration, setScriptDuration] = useState<number | null>(null);
+  const [customInstructions, setCustomInstructions] = useState('');
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -44,6 +59,7 @@ export default function App() {
     setSelectedStyle('transcription');
     setVariationCount(1);
     setScriptDuration(null);
+    setCustomInstructions('');
     setError(null);
   };
 
@@ -142,11 +158,13 @@ export default function App() {
       }
 
       const durationText = currentDuration ? `The script should be approximately ${currentDuration} minutes long when spoken at a normal pace.` : "";
+      const customText = (activeMode === 'image' && customInstructions) ? `Additional User Instructions: ${customInstructions}` : "";
 
       parts.push({
         text: `Task: ${stylePrompts[currentStyle]}. 
         Context: ${inputDescription}
         ${durationText}
+        ${customText}
         CRITICAL: The output script MUST be in the same language as the input audio or the primary language identified in the images. Do not translate it to English unless the input is in English.
         Generate exactly ${currentCount} different variations of this script. 
         Return the result as a JSON array of strings. 
@@ -219,6 +237,29 @@ export default function App() {
     }
   };
 
+  const saveToLibrary = () => {
+    const current = variations[activeVariationIndex];
+    if (!current) return;
+
+    const newSaved: SavedScript = {
+      id: Date.now().toString(),
+      content: current.content,
+      style: current.style,
+      timestamp: Date.now(),
+      mode: activeMode
+    };
+
+    const updated = [newSaved, ...savedScripts];
+    setSavedScripts(updated);
+    localStorage.setItem('script_studio_saved', JSON.stringify(updated));
+  };
+
+  const deleteFromLibrary = (id: string) => {
+    const updated = savedScripts.filter(s => s.id !== id);
+    setSavedScripts(updated);
+    localStorage.setItem('script_studio_saved', JSON.stringify(updated));
+  };
+
   const showOptions = activeMode === 'image' || (activeMode === 'audio' && variations.length > 0);
 
   return (
@@ -261,6 +302,18 @@ export default function App() {
                 Image To Script
               </button>
             </div>
+
+            <button
+              onClick={() => setShowLibrary(!showLibrary)}
+              className={`px-4 py-1.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 border ${
+                showLibrary 
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-md' 
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <History size={16} />
+              Library ({savedScripts.length})
+            </button>
           </div>
 
           <AnimatePresence>
@@ -391,6 +444,18 @@ export default function App() {
                 </div>
               )}
 
+              {activeMode === 'image' && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Script Instructions (Optional)</h4>
+                  <textarea
+                    value={customInstructions}
+                    onChange={(e) => setCustomInstructions(e.target.value)}
+                    placeholder="Describe what kind of script you want (e.g., 'A funny script about a cat', 'A professional product review')"
+                    className="w-full h-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none transition-all"
+                  />
+                </div>
+              )}
+
               <button
                 onClick={generateScripts}
                 disabled={loading || (activeMode === 'audio' && !file) || (activeMode === 'image' && images.length === 0)}
@@ -454,6 +519,13 @@ export default function App() {
 
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={saveToLibrary}
+                        className="p-2 hover:bg-amber-50 text-amber-600 rounded-xl transition-colors"
+                        title="Save to Library"
+                      >
+                        <Bookmark size={20} />
+                      </button>
+                      <button
                         onClick={() => setIsEditing(!isEditing)}
                         className={`p-2 rounded-xl transition-colors ${
                           isEditing ? 'bg-indigo-100 text-indigo-600' : 'hover:bg-slate-100 text-slate-500'
@@ -506,6 +578,88 @@ export default function App() {
             </AnimatePresence>
           </div>
         </main>
+
+        {/* Library Modal/Drawer Overlay */}
+        <AnimatePresence>
+          {showLibrary && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowLibrary(false)}
+                className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
+              />
+              <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col"
+              >
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="text-amber-500" size={20} />
+                    <h2 className="text-lg font-bold">Saved Library</h2>
+                  </div>
+                  <button onClick={() => setShowLibrary(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                  {savedScripts.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center">
+                      <Bookmark size={48} className="mb-4 opacity-10" />
+                      <p className="text-sm font-medium">Your library is empty.<br/>Save scripts to see them here.</p>
+                    </div>
+                  ) : (
+                    savedScripts.map((script) => (
+                      <div key={script.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              script.mode === 'audio' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
+                            }`}>
+                              {script.mode}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              {script.style}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(script.timestamp).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600 line-clamp-4 leading-relaxed">
+                          {script.content}
+                        </p>
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(script.content);
+                            }}
+                            className="p-2 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg text-slate-500 transition-all"
+                            title="Copy"
+                          >
+                            <Copy size={14} />
+                          </button>
+                          <button
+                            onClick={() => deleteFromLibrary(script.id)}
+                            className="p-2 hover:bg-red-50 text-red-500 rounded-lg transition-all"
+                            title="Delete"
+                          >
+                            <Trash size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
