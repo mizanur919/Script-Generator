@@ -1,0 +1,5 @@
+{
+  "name": "Audio to Script Converter",
+  "description": "Upload an audio file and get a formatted script using Gemini AI.",
+  "requestFramePermissions": []
+}
