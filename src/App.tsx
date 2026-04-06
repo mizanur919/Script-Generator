@@ -50,6 +50,7 @@ export default function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [refineInput, setRefineInput] = useState('');
   const [refining, setRefining] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('Analyzing your inputs...');
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -114,7 +115,22 @@ export default function App() {
 
     setLoading(true);
     setError(null);
+    setIsPlaying(false);
     setIsEditing(false);
+
+    const messages = [
+      'Analyzing your inputs...',
+      'Understanding the context...',
+      'Crafting creative variations...',
+      'Polishing the language...',
+      'Finalizing your scripts...'
+    ];
+    
+    let msgIndex = 0;
+    const msgInterval = setInterval(() => {
+      msgIndex = (msgIndex + 1) % messages.length;
+      setLoadingMessage(messages[msgIndex]);
+    }, 2000);
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
@@ -234,6 +250,7 @@ export default function App() {
       setError(err.message || 'An error occurred during generation.');
     } finally {
       setLoading(false);
+      clearInterval(msgInterval);
     }
   };
 
@@ -606,7 +623,39 @@ export default function App() {
           {/* Right Column: Script Editor */}
           <div className="lg:col-span-8">
             <AnimatePresence mode="wait">
-              {variations.length > 0 ? (
+              {loading ? (
+                <motion.div
+                  key="loading"
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  className="bg-white border border-slate-200 rounded-3xl shadow-sm h-full min-h-[600px] flex flex-col items-center justify-center p-10 text-center"
+                >
+                  <div className="relative mb-8">
+                    <motion.div 
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                      className="w-24 h-24 border-4 border-indigo-100 border-t-indigo-600 rounded-full"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Sparkles className="text-indigo-600 animate-pulse" size={32} />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">Generating Magic</h3>
+                  <p className="text-slate-500 font-medium animate-pulse">{loadingMessage}</p>
+                  
+                  <div className="mt-8 flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        animate={{ scale: [1, 1.5, 1] }}
+                        transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                        className="w-2 h-2 bg-indigo-400 rounded-full"
+                      />
+                    ))}
+                  </div>
+                </motion.div>
+              ) : variations.length > 0 ? (
                 <motion.div
                   key="editor"
                   initial={{ opacity: 0, scale: 0.98 }}
