@@ -103,8 +103,12 @@ export default function App() {
       setError('Please upload an audio file.');
       return;
     }
-    if ((activeMode === 'image' || activeMode === 'copywrite') && images.length === 0) {
+    if (activeMode === 'image' && images.length === 0) {
       setError('Please upload at least one image.');
+      return;
+    }
+    if (activeMode === 'copywrite' && images.length === 0 && !customInstructions.trim()) {
+      setError('Please upload an image or provide a prompt.');
       return;
     }
 
@@ -164,7 +168,17 @@ export default function App() {
       } else if (activeMode === 'image') {
         inputDescription = "I have provided only images. Create a creative script based on the visual content of these images.";
       } else {
-        inputDescription = "I have provided images for a copywriting task. Create high-quality Facebook ad copy based on these visuals and my instructions.";
+        const hasImages = images.length > 0;
+        const hasPrompt = customInstructions.trim().length > 0;
+        
+        if (hasImages && hasPrompt) {
+          inputDescription = "I have provided images and a prompt for a copywriting task. Create high-quality Facebook ad copy based on both.";
+        } else if (hasImages) {
+          inputDescription = "I have provided only images for a copywriting task. Create high-quality Facebook ad copy based on these visuals.";
+        } else {
+          inputDescription = "I have provided only a prompt for a copywriting task. Create high-quality Facebook ad copy based on my instructions.";
+        }
+
         formattingInstructions = `
         FORMATTING FOR FACEBOOK ADS:
         1. Use a strong, attention-grabbing HOOK at the beginning.
@@ -560,7 +574,12 @@ export default function App() {
 
               <button
                 onClick={generateScripts}
-                disabled={loading || (activeMode === 'audio' && !file) || ((activeMode === 'image' || activeMode === 'copywrite') && images.length === 0)}
+                disabled={
+                  loading || 
+                  (activeMode === 'audio' && !file) || 
+                  (activeMode === 'image' && images.length === 0) ||
+                  (activeMode === 'copywrite' && images.length === 0 && !customInstructions.trim())
+                }
                 className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
               >
                 {loading ? (
