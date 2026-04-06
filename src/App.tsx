@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-type ScriptStyle = 'transcription' | 'sales' | 'storytelling' | 'emotional';
+type ScriptStyle = 'transcription' | 'sales' | 'storytelling' | 'emotional' | 'professional' | 'witty' | 'urgent' | 'minimalist';
 
 interface ScriptVariation {
   id: number;
@@ -25,11 +25,11 @@ interface SavedScript {
   content: string;
   style: ScriptStyle;
   timestamp: number;
-  mode: 'audio' | 'image';
+  mode: 'audio' | 'image' | 'copywrite';
 }
 
 export default function App() {
-  const [activeMode, setActiveMode] = useState<'audio' | 'image'>('audio');
+  const [activeMode, setActiveMode] = useState<'audio' | 'image' | 'copywrite'>('audio');
   const [file, setFile] = useState<File | null>(null);
   const [images, setImages] = useState<File[]>([]);
   const [variations, setVariations] = useState<ScriptVariation[]>([]);
@@ -51,12 +51,12 @@ export default function App() {
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const handleModeChange = (mode: 'audio' | 'image') => {
+  const handleModeChange = (mode: 'audio' | 'image' | 'copywrite') => {
     setActiveMode(mode);
     setFile(null);
     setImages([]);
     setVariations([]);
-    setSelectedStyle('transcription');
+    setSelectedStyle(mode === 'copywrite' ? 'sales' : 'transcription');
     setVariationCount(1);
     setScriptDuration(null);
     setCustomInstructions('');
@@ -101,7 +101,7 @@ export default function App() {
       setError('Please upload an audio file.');
       return;
     }
-    if (activeMode === 'image' && images.length === 0) {
+    if ((activeMode === 'image' || activeMode === 'copywrite') && images.length === 0) {
       setError('Please upload at least one image.');
       return;
     }
@@ -131,7 +131,7 @@ export default function App() {
         });
       }
 
-      if (activeMode === 'image') {
+      if (activeMode === 'image' || activeMode === 'copywrite') {
         for (const img of images) {
           const imgBase64 = await fileToBase64(img);
           parts.push({
@@ -145,28 +145,45 @@ export default function App() {
 
       const stylePrompts = {
         transcription: "Provide a direct, accurate transcription or description of the content. If audio is provided, transcribe it. If only images are provided, describe the scenes and potential script for them.",
-        sales: "Create a high-converting sales script based on the provided inputs. Focus on benefits and persuasion.",
+        sales: "Create a high-converting sales script or ad copy based on the provided inputs. Focus on benefits, persuasion, and a strong call to action.",
         storytelling: "Create a compelling narrative or story based on the provided inputs. Use descriptive language and a clear arc.",
-        emotional: "Create a script with an emotional focus based on the provided inputs. Connect with the audience's feelings."
+        emotional: "Create a script with an emotional focus based on the provided inputs. Connect with the audience's feelings and empathy.",
+        professional: "Create a formal, professional, and authoritative script or copy. Suitable for corporate presentations or B2B marketing.",
+        witty: "Create a clever, funny, and engaging script or copy. Use humor and wordplay to capture attention.",
+        urgent: "Create a script or copy that creates a sense of urgency and FOMO (Fear Of Missing Out). Use time-sensitive language.",
+        minimalist: "Create a short, punchy, and direct script or copy. Every word must count."
       };
 
       let inputDescription = "";
+      let formattingInstructions = "";
+
       if (activeMode === 'audio') {
         inputDescription = "I have provided an audio file. Create the script based on this audio.";
-      } else {
+      } else if (activeMode === 'image') {
         inputDescription = "I have provided only images. Create a creative script based on the visual content of these images.";
+      } else {
+        inputDescription = "I have provided images for a copywriting task. Create high-quality Facebook ad copy based on these visuals and my instructions.";
+        formattingInstructions = `
+        FORMATTING FOR FACEBOOK ADS:
+        1. Use a strong, attention-grabbing HOOK at the beginning.
+        2. Use clear bullet points for benefits or features.
+        3. Include relevant emojis to make the text engaging but keep it professional.
+        4. End with a clear and compelling CALL TO ACTION (CTA).
+        5. Use line breaks to make the text easy to read on mobile devices.
+        `;
       }
 
-      const durationText = currentDuration ? `The script should be approximately ${currentDuration} minutes long when spoken at a normal pace.` : "";
-      const customText = (activeMode === 'image' && customInstructions) ? `Additional User Instructions: ${customInstructions}` : "";
+      const durationText = (currentDuration && activeMode !== 'copywrite') ? `The script should be approximately ${currentDuration} minutes long when spoken at a normal pace.` : "";
+      const customText = ((activeMode === 'image' || activeMode === 'copywrite') && customInstructions) ? `Additional User Instructions: ${customInstructions}` : "";
 
       parts.push({
         text: `Task: ${stylePrompts[currentStyle]}. 
         Context: ${inputDescription}
+        ${formattingInstructions}
         ${durationText}
         ${customText}
         CRITICAL: The output script MUST be in the same language as the input audio or the primary language identified in the images. Do not translate it to English unless the input is in English.
-        Generate exactly ${currentCount} different variations of this script. 
+        Generate exactly ${currentCount} different variations of this script/copy. 
         Return the result as a JSON array of strings. 
         Each string should be one variation. 
         Do not include any other text, just the JSON array.`,
@@ -260,7 +277,7 @@ export default function App() {
     localStorage.setItem('script_studio_saved', JSON.stringify(updated));
   };
 
-  const showOptions = activeMode === 'image' || (activeMode === 'audio' && variations.length > 0);
+  const showOptions = activeMode === 'image' || activeMode === 'copywrite' || (activeMode === 'audio' && variations.length > 0);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100">
@@ -301,6 +318,17 @@ export default function App() {
                 <ImageIcon size={16} />
                 Image To Script
               </button>
+              <button
+                onClick={() => handleModeChange('copywrite')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                  activeMode === 'copywrite' 
+                    ? 'bg-indigo-600 text-white shadow-md' 
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Edit3 size={16} />
+                Copy Write Make
+              </button>
             </div>
 
             <button
@@ -324,12 +352,15 @@ export default function App() {
                 exit={{ opacity: 0, y: 10 }}
                 className="flex flex-wrap items-center gap-3"
               >
-                <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-                  {(['transcription', 'sales', 'storytelling', 'emotional'] as ScriptStyle[]).map((style) => (
+                <div className="flex flex-wrap bg-white p-1 rounded-xl border border-slate-200 shadow-sm gap-1">
+                  {(activeMode === 'copywrite' 
+                    ? (['sales', 'emotional', 'professional', 'witty', 'urgent', 'minimalist'] as ScriptStyle[])
+                    : (['transcription', 'sales', 'storytelling', 'emotional'] as ScriptStyle[])
+                  ).map((style) => (
                     <button
                       key={style}
                       onClick={() => setSelectedStyle(style)}
-                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                         selectedStyle === style 
                           ? 'bg-indigo-600 text-white shadow-md' 
                           : 'text-slate-600 hover:bg-slate-50'
@@ -353,21 +384,23 @@ export default function App() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">Duration (min):</span>
-                  <input 
-                    type="number"
-                    min={1}
-                    max={60}
-                    placeholder="Auto"
-                    value={scriptDuration || ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setScriptDuration(val === '' ? null : Math.min(60, Math.max(1, Number(val))));
-                    }}
-                    className="w-10 text-sm font-bold text-indigo-600 focus:outline-none bg-transparent"
-                  />
-                </div>
+                {activeMode !== 'copywrite' && (
+                  <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-sm">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-tight">Duration (min):</span>
+                    <input 
+                      type="number"
+                      min={1}
+                      max={60}
+                      placeholder="Auto"
+                      value={scriptDuration || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setScriptDuration(val === '' ? null : Math.min(60, Math.max(1, Number(val))));
+                      }}
+                      className="w-10 text-sm font-bold text-indigo-600 focus:outline-none bg-transparent"
+                    />
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -413,7 +446,9 @@ export default function App() {
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Image Input</h4>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                      {activeMode === 'copywrite' ? 'Visual Context' : 'Image Input'}
+                    </h4>
                     <label className="cursor-pointer text-indigo-600 hover:text-indigo-700 text-xs font-bold flex items-center gap-1">
                       <ImageIcon size={14} />
                       Add Images
@@ -444,13 +479,17 @@ export default function App() {
                 </div>
               )}
 
-              {activeMode === 'image' && (
+              {(activeMode === 'image' || activeMode === 'copywrite') && (
                 <div className="space-y-2">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Script Instructions (Optional)</h4>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    {activeMode === 'copywrite' ? 'Copywriting Prompt' : 'Script Instructions (Optional)'}
+                  </h4>
                   <textarea
                     value={customInstructions}
                     onChange={(e) => setCustomInstructions(e.target.value)}
-                    placeholder="Describe what kind of script you want (e.g., 'A funny script about a cat', 'A professional product review')"
+                    placeholder={activeMode === 'copywrite' 
+                      ? "What are you selling? Who is the audience? (e.g., 'Selling eco-friendly water bottles to hikers')" 
+                      : "Describe what kind of script you want (e.g., 'A funny script about a cat', 'A professional product review')"}
                     className="w-full h-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none transition-all"
                   />
                 </div>
@@ -458,7 +497,7 @@ export default function App() {
 
               <button
                 onClick={generateScripts}
-                disabled={loading || (activeMode === 'audio' && !file) || (activeMode === 'image' && images.length === 0)}
+                disabled={loading || (activeMode === 'audio' && !file) || ((activeMode === 'image' || activeMode === 'copywrite') && images.length === 0)}
                 className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
               >
                 {loading ? (
@@ -571,7 +610,9 @@ export default function App() {
                   <p className="max-w-xs text-sm">
                     {activeMode === 'audio' 
                       ? 'Upload an audio file to generate its transcription.' 
-                      : 'Upload images to generate creative scripts based on them.'}
+                      : activeMode === 'image'
+                      ? 'Upload images to generate creative scripts based on them.'
+                      : 'Upload images and provide a prompt to generate high-converting ad copy.'}
                   </p>
                 </motion.div>
               )}
