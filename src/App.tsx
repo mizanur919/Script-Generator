@@ -48,6 +48,8 @@ export default function App() {
   const [customInstructions, setCustomInstructions] = useState('');
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [refineInput, setRefineInput] = useState('');
+  const [refining, setRefining] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -218,6 +220,67 @@ export default function App() {
       setError(err.message || 'An error occurred during generation.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefine = async () => {
+    const currentVariation = variations[activeVariationIndex];
+    if (!currentVariation || !refineInput.trim()) return;
+
+    setRefining(true);
+    setError(null);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+      
+      const parts: any[] = [];
+
+      // Include original images if available for context during refinement
+      if (activeMode === 'image' || activeMode === 'copywrite') {
+        for (const img of images) {
+          const imgBase64 = await fileToBase64(img);
+          parts.push({
+            inlineData: {
+              data: imgBase64,
+              mimeType: img.type,
+            },
+          });
+        }
+      }
+
+      parts.push({
+        text: `Original Content:
+        "${currentVariation.content}"
+
+        Refinement Instructions:
+        "${refineInput}"
+
+        Task: Refine the original content based on the instructions. 
+        Maintain the same language and overall style (${currentVariation.style}).
+        If images are provided, ensure the refinement still aligns with the visual context.
+        Return ONLY the refined text. Do not include any explanations or JSON formatting.`,
+      });
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ parts }],
+      });
+
+      const refinedContent = response.text;
+      if (refinedContent) {
+        const updatedVariations = [...variations];
+        updatedVariations[activeVariationIndex] = {
+          ...currentVariation,
+          content: refinedContent.trim()
+        };
+        setVariations(updatedVariations);
+        setRefineInput('');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'An error occurred during refinement.');
+    } finally {
+      setRefining(false);
     }
   };
 
@@ -581,17 +644,42 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex-1 p-6 md:p-10">
+                  <div className="flex-1 p-6 md:p-10 flex flex-col">
                     {isEditing ? (
                       <textarea
                         value={variations[activeVariationIndex].content}
                         onChange={(e) => updateActiveVariation(e.target.value)}
-                        className="w-full h-full min-h-[400px] p-0 border-none focus:ring-0 text-slate-700 text-lg leading-relaxed font-medium resize-none outline-none"
+                        className="flex-1 w-full min-h-[300px] p-0 border-none focus:ring-0 text-slate-700 text-lg leading-relaxed font-medium resize-none outline-none"
                         autoFocus
                       />
                     ) : (
-                      <div className="whitespace-pre-wrap text-slate-700 text-lg leading-relaxed font-medium">
+                      <div className="flex-1 whitespace-pre-wrap text-slate-700 text-lg leading-relaxed font-medium mb-6">
                         {variations[activeVariationIndex].content}
+                      </div>
+                    )}
+
+                    {/* Refinement Input */}
+                    {!isEditing && (
+                      <div className="mt-auto pt-6 border-t border-slate-100">
+                        <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200 focus-within:border-indigo-400 transition-all">
+                          <input
+                            type="text"
+                            value={refineInput}
+                            onChange={(e) => setRefineInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+                            placeholder="Refine this version... (e.g., 'make it shorter', 'add more emojis')"
+                            className="flex-1 bg-transparent px-3 py-2 text-sm outline-none"
+                            disabled={refining}
+                          />
+                          <button
+                            onClick={handleRefine}
+                            disabled={refining || !refineInput.trim()}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center gap-2"
+                          >
+                            {refining ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                            Refine
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
